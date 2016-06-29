@@ -1,0 +1,10 @@
+to init
+	ul-power
+	ul-init
+	ul-go
+
+	loop
+	[
+		receive-packet
+	]
+end

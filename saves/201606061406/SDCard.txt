@@ -1,0 +1,1299 @@
+;*********************************************************************************
+; This code is used to run a micro SD Card using Sparkfun's micro SD breakout 
+; board (BOB-00544) for the uLogo App Board.
+;
+; Written by Hunter Mills (8/20/14)
+; Updates by Hunter Mills (8/25/14)
+;            Hunter Mills (12/18/14)
+;            Hunter Mills (1/22/15)
+;            Hunter Mills (6/3/15)
+;
+; Version 4.3 Changes:
+;    - Fixed bug in SD-Find-Open where it selected the last written block vs
+;         the first open and the special case at (0,0).
+;    - Added an uninitiate SD word: "uninit-sd". This word sends the card into
+;         a low power mode.
+; Version 4.2 Changes:
+;    - Added erase functions
+;    - Added bisection search to find first open memory block (assuming that
+;         data is written form the first block on).
+;    - Removed "sucess" prompts (they can be commented back in for debugging or
+;         for a verbose response). They get in the way for long writes or reads.
+;    - Added examples of using auto write, erase, and find open block functions.
+;
+; Version 4.1 Changes:
+;    - Updated code to adhere to "SD Specifications Part 1: Physical Layer
+;        Simplified Specification Version 4.10".
+;    - Changed range of acceptable cards from 2GB SD cards to cards 
+;        4GB and above.
+;    - Started adding more descriptive error responses.
+;
+; Version 4 Changes:
+;    - Updated code for the App Board from Dev Board 3.5V.
+;
+; Version 3 Changes:
+;    - Added words that auto log data from the MSP430 Buffer to the SD Card as
+;        the MSP430 Buffer fills.
+;
+; Version 2 Changes:
+;    - Added more comments/documentation.
+;    - Renamed most words to something that defines there actions.
+;    - Changed write command to write data to SD from a specific location in the
+;        MSP430's memory (same for reading as well).
+;    - Added basic error handling.
+;
+;     >>>>>>>>>This code uses words and definitions in spiV3.txt<<<<<<<<<<<
+;
+; Documentation on SD can be found at:
+;    https://www.sdcard.org/downloads/pls/simplified_specs/part1_410.pdf
+; 
+; Summay of SD Operation can be found at:
+;    http://elm-chan.org/docs/mmc/mmc_e.html
+;*********************************************************************************
+
+
+; Table of Contents
+;*********************************************************************************
+; 1) Operation Summary
+; 2) Micro SD Wiring and Physical Setup
+; 3) Micro SD Code and Words
+;       A) Initiation of micro SD card
+;       B) Reading blocks from micro SD card
+;       C) Writining blocks to micro SD card
+;       D) Erasing blocks from micro SD card
+;       E) Logging Data in/out of MSP430 Memory
+;       F) Finding First Open Block 
+;       G) Supplementary Words
+; 4) Micro SD Card Operation Examples
+;*********************************************************************************
+
+
+; 1) Micro SD Operation Summary
+;*********************************************************************************
+; SD cards use flash memory and this code can operate cards greater than 4Gb of
+; memory.
+;
+; SD cards can operate in two modes SD mode, and SPI mode. This code has the micro
+; SD card operate in SPI mode.
+;
+; Words in this document can initiate the micro SD-Card in SPI mode, read 512 byte
+; blocks and write 512 byte blocks.
+;
+;  >>>>>As is, this code does not create files that are computer readable.<<<<<
+;
+; However, raw data can be extracted from the card using a hex editor.
+;
+;         >>>>>As is, there is only limited/basic error handling.<<<<<
+;
+; to export data, the uLogo Dev Board would need to read the data off the board,
+; send the data to jLogo, and have jLogo save the data.
+;*********************************************************************************
+
+
+; 2) Micro SD Wiring and Physical Setup
+;*********************************************************************************
+; On the micro SD breakout board, seven pins labled as:
+;
+; 1) " CD "   -   Unused in SPI
+; 2) " DO "   -   Data Out (same as Master In / Slave Out (MISO))
+; 3) " GND "  -   Ground
+; 4) " SCK "  -   SCK (same as Clock (CLK))
+; 5) " VCC "  -   Power
+; 6) " DI "   -   Data In (same as Master Out / Slave In (MOSI))
+; 7) " CS "   -   Chip Select
+;
+; When wiring this device to the uLogo Dev Board, the connections are as follows:
+;
+;   CD    <------->   No Connection
+;   DO    <------->   uLogo SPI SOMI (Pin 26)
+;   GND   <------->   uLogo Ground
+;   SCK   <------->   uLogo SPI CLK  (Pin 27)
+;   VCC   <------->   uLogo Power
+;   DI    <------->   uLogo SPI SIMO (Pin 25)
+;   CS    <------->   Any available Digital Pin (this code uses dp5 (Pin 24))
+;
+;                      App Board Pin Outs
+;
+;                     --------------------     
+;                     |                O |   
+;   1.  3.3V Out      |             ---  |   18. Ground
+;   2.  DAC Out 0     |            | O | |   19. 3.3V
+;   3.  DAC Out 1     |             ---  |   20. 1-Wire
+;   4.  p6.7 - ADC7   |                  |   21. DAC Ref
+;   5.  p6.6 - ADC6   |                  |   22. MSP Ref
+;   6.  p6.5 - ADC5   |                  |   23. p1.3 - dp4
+;   7.  p6.4 - ADC4   |                  |   24. p1.4 - dp5        <-------------
+;   8.  p6.3 - ADC3   |                  |   25. p3.1 - MOSI (SPI) <---- Used ---
+;   9.  p6.2 - ADC2   |            ----  |   26. p3.2 - MISO (SPI) <---- Pins ---
+;   10. p6.1 - ADC1   |            |  |  |   27. p3.3 - CLK (SPI)  <-------------
+;   11. p6.0 - ADC0   |            |  |  |   28. p3.0 - dp6
+;   12. p5.7 - dp0    |            ----  |   29. p3.6 - TX (UART)
+;   13. p5.6 - dp1    |             ||   |   30. p3.7 - RX (UART)
+;   14. p5.5 - dp2    |                  |   31. p5.0 - dp7
+;   15. p5.4 - dp3    |                  |   32. p5.1 - SDA (I2C)
+;   16. Reset         | _________  _____ |   33. p5.2 - SCL (I2C)
+;   17. Ground        | |       |  |   | |   34. p5.3 - dp8
+;                     --------------------
+;                      Port 4        RFM-22B
+;                     (p4.0 - p4.7) (p1.5, p1.6, p1.7, p2.0)
+;
+;*********************************************************************************
+
+
+; 3) Micro SD Card Code and Words
+;*********************************************************************************
+; After setting up the device, there are three primary uLogo words.
+;
+; 1) SD Initiation and Un-initiation (init-sd and cmd0 to Un-init)
+; 2) Read SD Memory Block (read-sd)
+; 3) Write SD Memory Block (write-sd)
+; 4) Store SD Data to be Transfered
+;
+; These primary words may also be comprised of other secondary uLogo words.
+;
+; More information on each word will be in the words section.
+;*********************************************************************************
+
+
+; 3A) Micro SD Word: Initiation (init-sd and uninit-sd)
+;*********************************************************************************
+; Words that Initiates SD, puts it into SPI mode, sends it to idle, and wake up.
+;
+;   - init-sd: Initiates SD card for operation >>>Must be done before operation<<<
+;   - uninit-sd: Sends SD into idle mode
+;   
+; Init-sd also calls the following words as per the datasheet's recomendation.
+;
+;   - cmd0: Resets the SD card in SPI mode
+;   - cmd8: Checks for proper voltage
+;   - acmd41: Initializes and wakes card up
+;   - cmd58: Determines if card is 4Gb or greater
+;
+
+
+global [ MSP_Buf_CNT ]
+
+; init-sd
+;********************
+
+to init-sd                ; Word to Initiate the SD Card
+
+   let [sd_stat 1]                  ; Initiate Error Flag
+
+   setMSP_Buf_CNT 0                 ; Initiate Buffer
+
+   init-spi-sd                      ; Initiates SPI bus
+   dp5output                        ; Initiates CS pin as GIPO on Digital Pin 5
+   dp5on                            ; Deselects 
+
+         ; ***** Running Commands as per Datasheet *****
+
+   if (cmd0 != 1) and (:sd_stat = 1) [ make "sd_stat 2 
+      prs "|SD Initiation Failure: Card Not Resesting| ]   
+
+   if (cmd8 != 1) and (:sd_stat = 1) [ make "sd_stat 3 
+      prs "|SD Initiation Failure: Not Enough Power| ]  
+
+   if :sd_stat = 1 [                ; acmd41 May Need to be Ran Multiple Times
+      make "sd_stat 0
+      repeat 50 [
+         if (:sd_stat = 0) [
+            make "sd_stat acmd41
+         ] ; end if
+      ] ; end repeat
+
+      if (:sd_stat != 1) [ make "sd_stat 4 
+         prs "|SD Initiation Failure: Card Not Waking Up| 
+      ] ; end if 
+   ] ; end if
+
+   if (cmd58 != 1)  and (:sd_stat = 1) [ make "sd_stat 5 
+      prs "|SD Initiation Failure: Incorrect Card Type Inserted| ]
+
+;   if (:sd_stat = 1) [  prs "|SD Initiation Successful|]
+   
+end
+
+; uninit-sd
+;********************
+
+to uninit-sd
+   ignore cmd0
+end
+
+; cmd0
+;********************
+
+to cmd0                   ; Word that sends device to idle mode and inits SPI
+
+   let [out 0]
+
+   repeat 5 [spi-tx 255]            ; Start Clock
+
+   dp5off                           ; Select SD Device
+
+   repeat 1 [spi-tx $FF]            ; Continue Clock
+
+   spi-tx $40                       ; cmd0 Argument
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+   spi-tx $95
+
+   repeat 10 [                      ; Wait for Response
+      if :out != 1 [
+         make "out spi-rx2          ; The Response
+      ] ; end if
+   ] ; end repeat
+
+   dp5on                            ; Deselect SD Device
+
+   output :out                      ; Return SD Response
+                                    ; Value of 1 for success
+end
+
+; cmd8
+;********************
+
+to cmd8                   ; Word that Porbes if the Voltage is Correct
+
+   let [rx_holder0 255]             ; Temp Variable: SPI Receive Place Holder
+   let [rx_holder1 255]             ; Temp Variable: SPI Receive Place Holder
+   let [out 0]                      ; Temp Varibale: Output
+
+   repeat 5 [spi-tx 255]            ; Start Clock
+
+   dp5off                           ; Select SD Device
+
+   repeat 1 [spi-tx $FF]            ; Continue Clock
+
+   spi-tx $48                       ; cmd8 Arguement                  
+   spi-tx $00
+   spi-tx $00
+   spi-tx $01
+   spi-tx $AA
+   spi-tx $87
+
+   repeat 20 [                      ; Wait for Response
+
+      if (:rx_holder0 = 255) [
+         make "rx_holder0 spi-rx2   ; SD Response
+      ]
+
+      if (:rx_holder0 = 1) [        ; Continue is Response is Correct
+
+         spi-tx 255                 ; Irrelevent Responses
+         spi-tx 255
+
+         make "rx_holder0 spi-rx2   ; Relevent Responses
+         make "rx_holder1 spi-rx2
+
+         if (:rx_holder0 = 1) and (:rx_holder1 = 170) [
+            make "out 1             ; Make out 1 if Responses are Correct
+         ] ; end if
+      ] ; end if
+   ] ; end repeat
+
+   dp5on                            ; Deselect SD Device
+
+   output :out                      ; Return Value of 1 if Voltage is Right
+
+end
+
+; acmd41
+;********************
+
+to acmd41                 ; Word to Wake-Up and Initalize SD
+
+   let [rx_holder0 255]             ; Temp Variable: SPI Receive Place Holder
+   let [out 0]                      ; Temp Varibale: Output
+
+   repeat 5 [spi-tx 255]            ; Start Clock
+
+   dp5off                           ; Select SD Device
+
+   repeat 1 [spi-tx $FF]            ; Continue Clock
+
+   spi-tx $77                       ; cmd55 Arguement                 
+   spi-tx $00                       ; cmd55 Must Be Called Prior to acmd41
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+   spi-tx $01
+
+   repeat 50 [                      ; Wait for Response 
+      if (:rx_holder0 = 255) [
+         make "rx_holder0 spi-rx2   ; Response
+      ] ; end if
+   ] ;end repeat
+
+   dp5on                            ; Deselect Device
+
+   make "rx_holder0 255             ; Reset Var
+
+   repeat 5 [spi-tx 255]            ; Start Clock
+
+   dp5off                           ; Select SD Device
+
+   repeat 1 [spi-tx $FF]            ; Continue Clock
+
+   spi-tx $69                       ; acmd41 Argument             
+   spi-tx $40
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+   spi-tx $01
+
+   repeat 20 [                      ; Wait for Response
+      if (:rx_holder0 = 255) [
+         make "rx_holder0 spi-rx2   ; Response
+      ] ; end if
+
+      if (:rx_holder0 = 0) [
+         make "out 1                ; Make out 1 if Reponse is Correct
+      ] ; end if
+   ] ; end repeat
+
+   dp5on                            ; Deselect Device
+
+   output :out                      ; Return 1 if Initalized 
+
+end
+
+; cmd58
+;********************
+
+to cmd58                  ; Word to Tell if Correct Card is Inserted
+
+   let [rx_holder 255]              ; Temp Variable: SPI Receive Place Holder
+   let [out 0]                      ; Temp Varibale: Output
+   let [out 0]
+
+   repeat 5 [spi-tx 255]            ; Start Clock
+
+   dp5off                           ; Select SD Device
+
+   repeat 1 [spi-tx $FF]            ; Continue Clock
+
+   spi-tx $7A                       ; cmd58 Argument            
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+   spi-tx $01
+
+   repeat 10 [                      ; Wait for Response
+
+      if (:rx_holder = 255) [
+
+         make :rx_holder spi-rx2    ; First Byte Response
+
+         if (:rx_holder = 0) [
+
+            make :rx_holder spi-rx2 ; Second Byte Response
+
+            spi-tx 255              ; Irelevent Data
+            spi-tx 255
+            spi-tx 255
+
+         ] ; end if
+      ] ; end if
+   ] ; end repeat
+
+   dp5on
+
+   make "out bin-test :rx_holder 6  ; Return Correct bit (1 for correct card)
+
+   output :out
+
+end
+
+; init-spi-basic
+;********************
+
+to init-spi-sd
+
+   bset UCB0CTL1 UCSWRST      ; Disable USCI
+                              
+   bset p3sel channel1        ; Disable GPIO functionality
+   bset p3sel channel2
+   bset p3sel channel3
+
+   bset UCB0CTL0 UCSYNC       ; Setting Control Registers to Common Settings
+   bclr UCB0CTL0 UCMODE0
+   bclr UCB0CTL0 UCMODE1
+   bset UCB0CTL0 UCMST
+   bclr UCB0CTL0 UC7BIT
+   bset UCB0CTL0 UCMSB
+   bclr UCB0CTL0 UCCKPL
+   bset UCB0CTL0 UCCKPH
+
+   bset UCB0CTL1 UCSSEL1
+   bclr UCB0CTL1 UCSSEL0
+
+   writeb ucb0br0 0           ; Clock Speed         
+   writeb ucb0br1 2
+
+   bclr UCB0CTL1 UCSWRST      ; Re-Enable USCI 
+
+end
+
+;*********************************************************************************
+
+
+; 3B) Micro SD Word: SD Read (read-sd)
+;*********************************************************************************
+; Word to read a SD block with the specified block number to be read as the input.
+;
+; The word converts the block address to the correct byte address.
+;
+; There is a delay time between the time when the command is received and
+; processed before the SD card starts returning data. This word accounts for that
+; by performing some dummy reads until the correct transmission flag is received.
+;
+; By default, this word prints each transmission, and could be changed for the 
+; appropriate application (send to jLogo or save on to MSP430).
+
+to read-sd :block_number_high :block_number_low
+
+   let [rx_holder 255]              ; Temp Variable: SPI Receive Place Holder
+   let [sd_status 1]                ; Temp Variable: Error Flag
+   let [increment 0]                ; Temp Variable: Step Tracker
+
+   repeat 5 [ spi-tx 255 ]          ; Start Clock
+
+   dp5off                           ; Select Device
+
+   spi-tx 255                       ; Continue Clock
+ 
+   spi-tx $51                       ; Read Command
+
+   spi-tx (lsh :block_number_high -8)             ; Block Address
+   spi-tx (lsh (lsh :block_number_high 8) -8)     ;   Splitting Two 16 Bit #s
+   spi-tx (lsh :block_number_low -8)              ;   to 4 Bytes
+   spi-tx (lsh (lsh :block_number_low 8) -8)
+
+   spi-tx $01                       ; End Command Argument
+
+   repeat 25 [                      ; Wait for Response
+      if (:rx_holder = 255) [
+         make "rx_holder spi-rx2    ; The Response
+      ] ; end if
+   ]; end repeat
+
+   if :rx_holder != 0 [             ; If Bad Response, Report Failure
+      prs "|SD Card Failed to Accept Read Command|
+      make "sd_status 0
+   ] ; end if
+
+   if (:sd_status = 1) [            ; Continue if Valid Response
+      repeat 10 [
+         if (spi-rx2 = $FE) [       ; Wait for Transmission Token
+            repeat 512 [            ; Loop to Read 512 Bytes into MSP430 Memory
+
+               make "rx_holder spi-rx2
+               writeb (:increment + SD_Buffer) :rx_holder
+               make "increment :increment + 1
+
+            ] ; end repeat
+         ] ; end if
+      ] ; end repeat
+
+;      prs "|SD Read Successful|    ; Report Successful Read
+
+   ] ; end if
+
+   repeat 2 [spi-tx 255]            ; Ignore 16 Bit CRC
+
+   dp5on                            ; Deselect Device
+   
+end
+;*********************************************************************************
+
+
+; 3C) Micro SD Word: SD Write (write-sd)
+;*********************************************************************************
+; Word to write SD block with the specified block number to be read as the input.
+;
+; Word converts the block address to the correct byte address.
+;
+; Data is sent from a specific MSP430 memory address alloted for SD storage to the
+; SD card. This memory block spans from $1300 - $14FF.
+;
+; "cmd13" is another word in this section that is used in the "write-sd"
+; command. This word polls for error status during the SD write process.
+;
+
+to write-SD :block_number_high :block_number_low
+
+   let [rx_holder 255]              ; Temp Variable: SPI Receive Place Holder
+   let [sd_status 1]                ; Temp Variable: Error Flag
+   let [increment 0]                ; Temp Variable: Step Tracker
+
+   repeat 5 [ spi-tx 255 ]          ; Start Clock
+
+   dp5off                           ; Select Device
+
+   spi-tx 255                       ; Continue Clock
+
+   spi-tx $58                       ; Write Command
+
+   spi-tx (lsh :block_number_high -8)             ; Block Address
+   spi-tx (lsh (lsh :block_number_high 8) -8)     ;   Splitting Two 16 Bit #s
+   spi-tx (lsh :block_number_low -8)              ;   to 4 Bytes
+   spi-tx (lsh (lsh :block_number_low 8) -8)
+
+   spi-tx $01                        ; End Command Argument
+
+   repeat 10 [                       ; Wait for Response
+      if (:rx_holder = 255) [
+         make "rx_holder spi-rx2     ; The Response
+      ] ; end if
+   ]; end repeat
+
+   if :rx_holder != 0 [              ; If Bad Response, Report Failure
+      prs "|SD Card Failed to Accept Write Command|
+      make "sd_status 0
+   ] ; end if
+
+   if (:sd_status = 1) [             ; Continue if Valid Response
+
+      repeat 5 [ spi-tx 255 ]        ; Continue Clock
+
+      spi-tx $FE                     ; Send Start Transmission Token
+
+      repeat 512 [                   ; Loop to Write 512 Bytes to SD Card
+         spi-tx (readb (:increment + SD_Buffer))
+         make "increment :increment + 1
+      ] ; end repeat
+
+      spi-tx $FF                     ; 16 Bit CRC (Turned off)
+      spi-tx $FF
+
+      make "rx_holder 255            ; Reset Place Holder
+
+      repeat 10 [                    ; Wait for Response
+         if :rx_holder = 255 [
+            make "rx_holder spi-rx2  ; The Response
+         ] ; end if
+      ] ; end repeat
+                                     ; Failure Check
+      ifelse ((bin-test :rx_holder 3) = 1) 
+      [ prs "|SD Write Data Rejected| ] ; end if of ifelse
+      [] ;prs "|SD Write Data Accepted| ] ; end else of ifelse
+
+      repeat 100 [                   ; Wait for SD Card to Process Data
+         if :rx_holder != 255 [
+            make :rx_holder spi-rx2
+         ] ; end if
+      ] ; end repeat
+
+      make "sd_status cmd13          ; Check Status
+                                     ; Comment on Status
+      ifelse :sd_status = 0 [] ;prs "|SD Write Successful| ]
+      [ prf "|SD Write Unsuccessful: Error Code %d\n| :sd_status]
+
+   ] ; end if
+
+end
+
+; cmd13
+;********************
+
+to cmd13             ; Word to probe if the transfer was successful
+
+   ; Temporary Variables
+   let [rx_holder0 255]              ; Place holder for RX data to be processed
+   let [rx_holder1 255]
+   let [status 0]                    ; Temporary variable used for error checking
+
+   repeat 5 [ spi-tx 255 ]
+
+   dp5off                            ; Select Device
+
+   spi-tx $FF                        ; Starts Clock
+
+   spi-tx $4D                        ; Command to send Status
+
+   spi-tx $00                        ; Unused address bits
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+
+   spi-tx $01                        ; Checksum (turned off) 
+
+   repeat 10 [                       ; Wait for Response
+      if :status = 0 [
+         make "rx_holder0 spi-rx2    ; 1st Byte Response 
+ 
+         if (:rx_holder0 != 255) [
+            make "rx_holder1 spi-rx2 ; 2nd Byte Response
+            make "status 1
+         ] ; end if
+
+      ] ; end if
+   ] ; end repeat
+
+   dp5on                 ; Deselect Device
+
+   make :status (lsh :rx_holder0 8) + :rx_holder1     ; Combine Responses to 16b
+
+   output :status
+
+end
+;*********************************************************************************
+
+
+; 3D) Micro SD Word: Erase Blocks (erase-sd)
+;*********************************************************************************
+; Word used to erase SD blocks. The word takes a start and end location (both have
+; a high and low address) and erases all blocks inbetween and including the the
+; starting and stopping addresses.
+;
+; The word follows the paramaters defined in the SD 4.10 Physical Layer
+; Description: cmd32(start address) --> cmd33(end address) --> cmd38(erase).
+;
+;    - erase-sd :start_block_high :start_block_low :end_block_high :end_blocK_low
+;         This word erases SD blocks from (:start_block_high, :start_block_low)
+;         to (:end_block_high, :end_blocK_low).
+;
+;    - clear-sd - erases whole SD card from (0,0) tot ($75,$1e1f).
+;
+
+to clear-sd
+
+   erase-sd 0 0 $75 $1e1f
+
+end
+
+; erase-sd
+;********************
+to erase-sd :start_block_high :start_block_low :end_block_high :end_blocK_low
+
+   let [err 0]                       ; Temp Variable to hold error information
+
+   make "err (cmd32 :start_block_high :start_block_low)
+                                     ; Setting Starting Erase Point
+   ifelse not ((:err = 0) or (:err = 2)) [
+      prs "|Erase Error: Start Point Not Accepted|
+                                     ; Report Error if it Occurs
+   ] ; end if
+   [ ; begin else
+
+      make "err cmd33 :end_block_high :end_blocK_low
+                                     ; Setting Ending Erase Point
+      ifelse :err != 0 [
+         prs "|Erase Error: End Point Not Accepted|
+                                     ; Report Error if it Occurs
+      ] ; end if
+      [ ; begin else
+
+         make "err (cmd38)           ; Erase the Selection
+
+         ifelse :err != 0 [prs "|Erase Error: Failure to Erase|]
+         [prs "|Erase Successful|]
+
+      ] ; end else
+   ] ; end else
+
+end
+
+; cmd32
+;********************
+
+to cmd32 :start_block_high :start_block_low
+
+   let [out 255]
+
+   repeat 5 [ spi-tx 255 ]          ; Start Clock
+
+   dp5off                           ; Select Device
+
+   spi-tx 255                       ; Continue Clock
+
+   spi-tx $60                       ; Select Erase Start Command
+
+   spi-tx (lsh :start_block_high -8)             ; Block Address
+   spi-tx (lsh (lsh :start_block_high 8) -8)     ;   Splitting Two 16 Bit #s
+   spi-tx (lsh :start_block_low -8)              ;   to 4 Bytes
+   spi-tx (lsh (lsh :start_block_low 8) -8)
+
+   spi-tx $95
+
+   repeat 10 [                      ; Wait for Response
+      if :out = 255 [
+         make "out spi-rx2          ; The Response
+      ] ; end if
+   ] ; end repeat
+
+   dp5on                            ; Deselect SD Device
+
+   output :out                      ; Return SD Response
+                                    ; Value of 1 for success
+end
+
+; cmd33
+;********************
+
+to cmd33 :end_block_high :end_blocK_low
+
+   let [out 255]
+
+   repeat 5 [ spi-tx 255 ]          ; Start Clock
+
+   dp5off                           ; Select Device
+
+   spi-tx 255                       ; Continue Clock
+
+   spi-tx $61                       ; Select Erase End Command
+
+   spi-tx (lsh :end_block_high -8)             ; Block Address
+   spi-tx (lsh (lsh :end_block_high 8) -8)     ;   Splitting Two 16 Bit #s
+   spi-tx (lsh :end_blocK_low -8)              ;   to 4 Bytes
+   spi-tx (lsh (lsh :end_blocK_low 8) -8)
+
+   spi-tx $95
+
+   repeat 10 [                      ; Wait for Response
+      if :out = 255 [
+         make "out spi-rx2          ; The Response
+      ] ; end if
+   ] ; end repeat
+
+   dp5on                            ; Deselect SD Device
+
+   output :out                      ; Return SD Response
+                                    ; Value of 1 for success
+end
+
+; cmd38
+;********************
+
+to cmd38
+
+   let [out 255]
+
+   repeat 5 [spi-tx 255]            ; Start Clock
+
+   dp5off                           ; Select SD Device
+
+   repeat 1 [spi-tx $FF]            ; Continue Clock
+
+   spi-tx $66                       ; cmd38 Argument
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+   spi-tx $00
+   spi-tx $95
+
+   repeat 10 [                      ; Wait for Response
+      if :out = 255 [
+         make "out spi-rx2          ; The Response
+      ] ; end if
+   ] ; end repeat
+
+   waituntil [ spi-rx2 = 255 ]      ; Wait of 
+
+   dp5on                            ; Deselect SD Device
+
+   output :out                      ; Return SD Response
+                                    ; Value of 1 for success
+end
+;*********************************************************************************
+
+
+; 3E) Micro SD Word: Logging/Reading Data to be Transfered to the SD 
+;*********************************************************************************
+; These words are used to log data into the SD data buffer on the MSP430
+;
+;      >>>>>>>>>>> MSP430 SD Memory Block is $1300 - $14ff <<<<<<<<<<<<
+;
+;    - logread-sd - displays the SD buffer.
+;
+;    - SD-Clear-Buffer - clears the SD buffer.
+;
+;    - manlog-sd :data :address - writes data to the SD buffer, but write command
+;        must be manually ran to store data on the SD Card. It has two inputs,
+;        "data" and "address". "address" is the memory location in the SD Buffer
+;        (0 to 511). "data" is the byte to be stored at the memory address.
+;
+;    - SD-Log-Single :Data - writes one byte of data to the SD buffer. When the
+;         buffer is full, it writes the block to the SD Card and bumps the block
+;         location in MSP430 memory. "Data" is the desired byte to be logged.
+;
+;    - SD-Log-Chunk :Data_Address :Num_bytes - writes a chunck of bytes to the SD
+;         buffer. When the buffer is full, it writes the block to the SD Card and
+;         bumps the block location in MSP430 memory.It has two inputs,
+;         "data_address" and "num_bytes". "Num_bytes" is the number of bytes that
+;         are to be logged and "data_address" is the starting memory location of
+;         this address.
+;
+
+global [ SD_Block_Low SD_Block_High ]
+
+constants [ [ SD_Buffer $1300 ] ]
+
+; Words to Manually Write Blocks
+;********************
+
+to manlog-sd :data :address          ; Word to store 1 Byte on MSP430
+
+   writeb (:address + SD_Buffer) :data
+
+end
+
+
+to logread-sd                        ; Word to read block on MSP430
+
+   let [increment 0]
+
+   repeat 512 [
+      print readb (:increment + SD_Buffer)  ; Read memory location
+      make "increment :increment + 1        ; Bump count
+      mwait 100                             ; wait to not overload read buffer
+   ]
+
+end
+
+; Words to Automatically Write Block
+;********************
+
+to SD-Clear-Buffer                   ; Word to Clear MSP430 Buffer
+
+   let [ increment 0 ]
+
+   repeat 512 [
+
+      writeb (:increment + SD_Buffer) 0    ; Clear memory location
+      make "increment :increment + 1       ; Bump Count
+
+   ]
+
+end
+
+to SD-block-bump                     ; Word to Bump the Block Address
+
+   ifelse ( SD_Block_Low = $FFFF ) [        ; condition to test for rollover
+      setSD_Block_Low 0                     ;   form low block to high block
+      setSD_Block_High SD_BLock_High + 1
+   ][
+      setSD_Block_Low SD_Block_Low + 1
+   ]
+
+end
+
+                                      ; Word to Log Chunk of Data of :Num_bytes
+                                      ;  in Length at Address :Data_Address
+                                      ;  to the MSP Buffer and Autowrite to SD
+                                      ;  as Needed
+to SD-Log-Chunk :Data_Address :Num_bytes
+
+   let [ inc 0 ]                      ; Temp Variable: Used to Step
+
+   repeat :Num_bytes [                ; Loop Through Data
+                                      ; Transfer Data to MSP Buffer
+      writeb (MSP_Buf_CNT + SD_Buffer) (readb ( :Data_Address + :inc ))
+
+      setMSP_Buf_CNT MSP_Buf_CNT + 1  ; Increment MSP Buffer
+      make "inc :inc + 1              ; Increment Data Buffer
+
+      if MSP_Buf_CNT = 512 [          ; If MSP Buffer is Full Write a Block
+
+         Write-SD SD_Block_High SD_Block_Low
+
+         setMSP_Buf_CNT 0             ; Reset MSP Buffer Counter
+         SD-Block-Bump                ; Increment the Block Address
+         SD-Clear-Buffer              ; Clear the MSP Buffer
+
+      ] ; End If
+   ] ; End Repeat
+
+end
+
+                                      ; Word to Log 1 Byte into the MSP Buffer
+                                      ;  and Autowrite a Block to SD as Needed
+to SD-Log-Single :Data
+                                      ; Trasnfer Byte to MSP Buffer
+   writeb (MSP_Buf_CNT + SD_Buffer) :Data
+
+   setMSP_Buf_CNT MSP_Buf_CNT + 1     ; Increment the MSP Buffer
+
+   if MSP_Buf_CNT = 512 [             ; If MSP Buffer is Full Write a Block
+
+      Write-SD SD_Block_High SD_Block_Low
+
+      setMSP_Buf_CNT 0                ; Reset MSP Buffer Counter
+      SD-Block-Bump                   ; Increment the Block Address
+      SD-Clear-Buffer                 ; Clear the MSP Buffer
+
+   ] ; End If
+
+end
+
+;*********************************************************************************
+
+
+; 3F) Finding the First Open Block
+;*********************************************************************************
+; Word that runs a bisection search to find the first empty block on the SD card.
+;
+;   >>>>> Assumes that data is written from the beginning of the card <<<<<
+;
+; The word both stores the first open block in memory as well as displays the 
+; blocks. This is bet to be used on power up to find the first open block, and 
+; can be used with the auto-logging functions.
+;
+
+; SD-Find-Open
+;********************
+to SD-Find-Open
+
+   ; Temp Variables for 4GB card
+   let [al 0]
+   let [ah 0]
+   let [bl $1E1F] ; last block (low byte)
+   let [bh $75]   ; last block (high byte)
+   let [step 30]
+
+   repeat :step [
+
+      sd-bisect :ah :al :bh :bl       ; Bisect the test interval
+
+      mwait 10
+                                      ; Test if first open is above/below
+      ifelse ((sd-empty-block-test SD_Block_High SD_Block_Low) = 0) [
+
+          make "bh SD_Block_High      ; if empty bring interval foreward
+          make "bl SD_Block_Low
+      ] ; end if
+      [
+          make "ah SD_Block_High      ; if nonempty bring interval back
+          make "al SD_Block_Low
+      ] ; end else
+
+   ] ; end outer repeat               ; test so far has selected last written or
+                                      ;   0,0 if empty. This if selects first open
+
+                                      ; If (0,0) bump block if not empty
+   ifelse ((SD_Block_High = 0) and (SD_Block_Low = 0)) [
+      if ((sd-empty-block-test SD_Block_High SD_Block_Low) = 1) [
+         SD-Block-Bump
+      ] ; end if
+   ] ; end if
+   [
+      SD-Block-Bump                   ; If not (0,0) bump block
+   ] ; end else
+
+   prf "|SD_Block_High: %d, | SD_Block_High
+   prf "|SD_Block_Low: %d \n| SD_Block_Low
+
+end
+
+; sd-bisect
+;********************
+to sd-bisect :ah :al :bh :bl 
+
+   sd-add :ah :al :bh :bl                  ; c = (a+b)
+   sd-divide2 SD_Block_High SD_Block_Low   ; c = c/2
+
+end
+
+; sd-add
+;********************
+to sd-add :ah :al :bh :bl                  ; 32 bit bitwise addtion for two 16
+                                           ;    bit memory locations
+   let [cl 0]
+   let [ch 0]
+   let [carry 0]
+   let [rollover 0]
+
+   repeat 16 [
+      make "carry (:al and :bl)
+
+      if ((:al and $8000) and (:bl and $8000)) [
+         make "rollover 1
+      ] ; end if
+
+      make "al (:al xor :bl)
+      make "bl lsh :carry 1
+   ] ; end inner repeat 16
+
+   make "cl :al
+
+   ifelse :rollover = 1 [
+      make "ch (:ah + :bh + 1)
+   ] ; end if
+   [
+      make "ch (:ah + :bh)
+   ] ; end else
+
+   setSD_Block_High :ch
+   setSD_Block_Low :cl 
+
+end
+
+; sd-divide2
+;********************
+to sd-divide2 :ch :cl                      ; 32 bit bitwise division for two 16
+                                           ;    bit memory locations
+   make "cl (lsh :cl -1)
+
+   if (:ch and 1) [
+      make "cl (:cl + $8000)
+   ] ; end if
+
+   make "ch (lsh :ch -1)
+
+   setSD_Block_High :ch
+   setSD_Block_Low :cl 
+
+end
+
+;*********************************************************************************
+
+
+; 3G) Supplementary Words
+;*********************************************************************************
+; The Following word were created and used by other words:
+;
+;    - bin-test: Returns the test of bit position for a specific number
+;    - sd-empty-block-test: tests a block if it is either all 0's or 255's.
+;          returns 0 if the block is empty or 1 if it is not empty.
+;
+
+to bin-test :input :bitnum
+
+   let [out :input]
+   make "out (lsh :out (15 - :bitnum))  ; left shifts to remove data to isolate
+   make "out (lsh :out -15)             ;   desired bit value
+
+   output :out
+
+end
+
+to sd-empty-block-test :high_block :low_block
+
+   let [inc 0]     ; Temp variable: step counter
+   let [holder 0]  ; Temp variable: holder for test memory location
+   let [empty 0]   ; Temp variable: return value (0 for empty, 1 for nonempty)
+
+   read-sd :high_block :low_block                  ; Read the test block
+
+   repeat 512 [                                    ; Iterate though whole block
+
+      make "holder (readb (:inc + SD_Buffer))
+
+      if not ((:holder = 255) or (:holder = 0)) [  ; Empty test-SD often uses all
+                                                   ;   zeros or 255 for empty block
+         if :empty = 0 [ make "empty 1 ]
+
+      ] ; end if
+
+      make "inc :inc + 1                           ; Bump count
+
+   ] ; end repeat
+
+   output :empty                                   ; Return test valure
+
+end
+
+;*********************************************************************************
+
+; 4) Micro SD Card Operational Example
+;*********************************************************************************
+;
+; >>>>>EXAMPLE OF MANUALLY WRITTING BLOCKS<<<<<
+; Example of logging to MSP430 memory, writing that information to the SD card,
+; logging new data to MSP430 memory, and reading from sd over the new data to 
+; restore the old data.
+;
+; Begin Example:
+;
+;    setn 0              ; Log 0 - 255 twice into MSP430 memory
+;    repeat 512 [
+;       manlog-sd n n
+;       setn n + 1]
+;
+;    logread-sd          ; Read the log (should output 0 - 255 twice)
+;
+;    init-sd             ; Initiate SDset
+;
+;    write-sd 0 0        ; Write 0 - 255 twice into block 0
+;
+;    setn 0              ; Log o into MSP430 memory
+;    repeat 512 [
+;       manlog-sd 0 n
+;       setn n + 1]
+;
+;    logread-sd          ; Read the log (should read 0's)
+;
+;    read-sd 0 0         ; Read SD (puts read into memory)
+;
+;    uninit-sd           ; Put SD on standby
+;
+;    logread-sd          ; Read the log (should output 0 - 255 twice)
+;
+; End Example
+;
+; >>>>>EXAMPLE OF AUTOMATICALLY WRITTING BLOCKS<<<<<
+; There are two examples blow. The First logs blocks bytewise, and the second
+; logs blocks in chunks from a sub buffer.
+;
+;    ***Byte-wise example***
+; Begin Example:
+;
+;    setSD_Block_High 0   ; Setting start block
+;    setSD_Block_Low 0
+;
+;    init-sd              ; Initiate SD
+;
+;    erase-sd 0 0 0 5     ; erase first 5 memory blocks
+;
+;    setn 0
+;
+;    repeat 6 [           ; write 0,1,2,3,4,5 to each respective block
+
+;       repeat 512 [SD-Log-Single n]
+;       setn n + 1        ; Bump Count
+;    ]
+;
+;    read-sd 0 0          ; read block 0
+;    logread-sd           ; display block: should respond all 0's
+;
+;    read-sd 0 1          ; read block 1
+;    logread-sd           ; display block: should respond all 1's
+;
+;    read-sd 0 2          ; read block 2
+;    logread-sd           ; display block: should respond all 2's
+;
+;    read-sd 0 3          ; read block 3
+;    logread-sd           ; display block: should respond all 3's
+;
+;    read-sd 0 4          ; read block 4
+;    logread-sd           ; display block: should respond all 4's
+;
+;    read-sd 0 5          ; read block 5
+;    logread-sd           ; display block: should respond all 5's
+;
+;    uninit-sd           ; Put SD on standby
+;
+; End Example
+;
+;
+;    ***Chunk-wise example
+; Begin Example:
+;
+;    setSD_Block_High 0   ; Setting start block
+;    setSD_Block_Low 0
+;
+;    init-sd              ; Initiate SD
+;
+;    erase-sd 0 0 0 1     ; erase-first block
+;
+;    setm 0
+;
+;    repeat 64 [
+;       setn 0
+;       repeat 8 [
+;          writeb ($1500 + n) m   ; write 8 bytes to sub buffer
+;          setn n + 1             ; Bump Count
+;       ]
+;       SD-Log-Chunk $1500 8      ; Log the sub buffer to sd buffer
+;       setm m + 1                ; Bump Count
+;    ]
+;
+;    sd-clear-buffer     ; Clear SD Buffer
+;    logread-sd          ; display buffer: should respond all 0's
+;
+;    read-sd 0 0          ; read block 0
+;    logread-sd           ; display block: should respond all 0's
+;
+;    uninit-sd           ; Put SD on standby
+;
+; End Example
+;
+; >>>>>EXAMPLE OF ERSAING BLOCKS<<<<<
+; Here is an example of erasing blocks. It writes data to 6 blocks, reads it back,
+; erases it, and reads it back again tosee that it is erased.
+;
+; Begin Example:
+;
+;    setSD_Block_High 0   ; Setting start block
+;    setSD_Block_Low 0
+;
+;    init-sd              ; Initiate SD
+;
+;    setn 0
+;
+;    repeat 6 [           ; Write data to 6 blocks
+;       repeat 512 [SD-Log-Single n]
+;       setn n + 1
+;    ]
+;
+;    read-sd 0 0          ; read block 0
+;    logread-sd           ; display block: should respond all 0's
+;
+;    read-sd 0 1          ; read block 1
+;    logread-sd           ; display block: should respond all 1's
+;
+;    read-sd 0 2          ; read block 2
+;    logread-sd           ; display block: should respond all 2's
+;
+;    read-sd 0 3          ; read block 3
+;    logread-sd           ; display block: should respond all 3's
+;
+;    read-sd 0 4          ; read block 4
+;    logread-sd           ; display block: should respond all 4's
+;
+;    read-sd 0 5          ; read block 5
+;    logread-sd           ; display block: should respond all 5's
+;
+;    erase-sd 0 0 0 5     ; Erase the first 5 blocks: from (0,0) to (0,5)
+;
+;    read-sd 0 0          ; read block 0
+;    logread-sd           ; display block: should respond all 0's
+;
+;    read-sd 0 1          ; read block 1
+;    logread-sd           ; display block: should respond all 0's
+;
+;    read-sd 0 2          ; read block 2
+;    logread-sd           ; display block: should respond all 0's
+;
+;    read-sd 0 3          ; read block 3
+;    logread-sd           ; display block: should respond all 0's
+;
+;    read-sd 0 4          ; read block 4
+;    logread-sd           ; display block: should respond all 0's
+;
+;    read-sd 0 5          ; read block 5
+;    logread-sd           ; display block: should respond all 0's
+;
+;    uninit-sd           ; Put SD on standby
+;
+; End Example
+;
+; >>>>>EXAMPLE OF FINDING FIRST OPEN BLOCK<<<<<
+; Here is an example of using SD-Find-Open to find the first open block. It first
+; wipes the card and uses SD-Find-Open to find the first open block. It should be
+; (0,0). It then writes data to 6 blocks (0,0 to 0,5) and again uses SD-Find-Open
+; to find the first open block. It should be (0,6).
+;
+; Begin Example:
+;
+;    init-sd              ; Initiate SD
+;    clear-sd             ; Wipe SD
+;
+;    sd-find-open         ; Find first open (should find 0,0)
+;
+;    setn 0
+;
+;    repeat 6 [           ; Write data to first 6 blocks
+;       repeat 512 [SD-Log-Single n]
+;       setn n + 1
+;    ]
+;
+;    sd-find-open         ; Find first open (should find 0,6)
+;
+; End Example
+;*********************************************************************************

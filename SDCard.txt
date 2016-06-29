@@ -499,7 +499,7 @@ to read-sd :block_number_high :block_number_low
             ] ; end repeat
          ] ; end if
       ] ; end repeat	
-      ;prs "|SD Read Successful|    ; Report Successful Read
+      prs "|SD Read Successful|    ; Report Successful Read
 
    ] ; end if
 
@@ -847,7 +847,7 @@ to logread-sd                        ; Word to read block on MSP430
 
    let [increment 0]
 
-   repeat 512 [
+   repeat 32 [
       print readb (:increment + SD_Buffer)  ; Read memory location
       make "increment :increment + 1        ; Bump count
       mwait 100                             ; wait to not overload read buffer

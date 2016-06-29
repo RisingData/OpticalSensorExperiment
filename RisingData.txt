@@ -1,16 +1,20 @@
-global [ packetsize ]
+global [ packetsize, sdindex ]
 
 to ul-power
 	init-onboardleds
 	redon
 	wait 10
 	redoff
+	ul-init
 end
 
 to ul-init
 	yellowon
-	init-sd
+	sd-clear-buffer
 	setpacketsize 16
+	setSD_Block_High 0
+        setSD_Block_Low 0
+	init-sd
 	wait 10
 	yellowoff
 end
@@ -25,7 +29,10 @@ to ul-go
 		wait 10
 		collect-data
 		blueoff
+		print SD_Block_High
+		print SD_Block_Low
 		wait 100	
+
 	]
 end
 
@@ -37,21 +44,64 @@ to read-Optical-sensor
 	output readADC 1
 end
 
+to test-sd
+    setSD_Block_High 0   ; Setting start block
+    setSD_Block_Low 0
+
+    init-sd              ; Initiate SD
+
+    erase-sd 0 0 0 1     ; erase-first block
+
+    setm 0
+
+    repeat 64 [
+       setn 0
+       repeat 8 [
+          writeb ($1500 + n) n   ; write 8 bytes to sub buffer
+          setn n + 1             ; Bump Count
+       ]
+       SD-Log-Chunk $1500 8      ; Log the sub buffer to sd buffer
+       setm m + 1                ; Bump Count
+    ]
+
+    sd-clear-buffer     ; Clear SD Buffer
+    logread-sd          ; display buffer: should respond all 0's
+
+    read-sd 0 0          ; read block 0
+    logread-sd           ; display block: should respond all 0's
+
+    uninit-sd           ; Put SD on standby
+	
+	
+end
+
 to collect-data
 	blueon
 	init-packet 10
 	packet-word read-IR-sensor
 	packet-word read-Optical-sensor
 	add-checksum
+	write-packet-sd
 	wait 10
 	blueoff
 end
 
 to write-packet-sd
+
+	init-sd	
+	
 	setn 0
 	repeat packetsize [
-		print readb  ($1fc0 + n)
-		setn n + 1	
+		writeb ($1500 + n ) (readb ($1fc0 + n))
+		setn n + 1
 	]
-	SD-Log-Chunk $1fc0 packetsize
+
+	SD-Log-Chunk $1500 512
+
+	sd-clear-buffer     ; Clear SD Buffer
+	logread-sd          ; display buffer: should respond all 0's
+	read-sd 0 0          ; read block 0
+	logread-sd           ; display block: should respond all 0's
+	uninit-sd           ; Put SD on standby
+	
 end

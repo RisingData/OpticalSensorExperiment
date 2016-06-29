@@ -37,33 +37,6 @@ to read-Optical-sensor
 	output readADC 1
 end
 
-to test-sd
-	
-    setSD_Block_High 0 
-    setSD_Block_Low 0
-    init-sd
-    erase-sd 0 0 0 1 
-    
-    setm 0
-    repeat 64 [
-       setn 0
-       repeat 8 [
-          writeb ($1500 + n) m   
-          setn n + 1          
-       ]
-       SD-Log-Chunk $1500 8
-       setm m + 1                
-    ]
-
-    sd-clear-buffer     
-    logread-sd          
-
-    read-sd 0 0          
-    logread-sd         
-    uninit-sd
-
-end
-
 to collect-data
 	blueon
 	init-packet 10

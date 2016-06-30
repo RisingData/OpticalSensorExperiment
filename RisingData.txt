@@ -1,4 +1,4 @@
-global [ packetsize, sdindex ]
+global [ packetsize, index, i, sd_index, sd_low, sd_high ]
 
 to ul-power
 	init-onboardleds
@@ -6,12 +6,13 @@ to ul-power
 	wait 10
 	redoff
 	ul-init
+	ul-go
 end
 
 to ul-init
 	yellowon
 	sd-clear-buffer
-	setpacketsize 16
+	setpacketsize 36
 	setSD_Block_High 0
         setSD_Block_Low 0
 	init-sd
@@ -23,17 +24,21 @@ to ul-go
 	greenon
 	wait 10 
 	greenoff
-	loop 
-	[
-		blueon
-		wait 10
-		collect-data
-		blueoff
-		print SD_Block_High
-		print SD_Block_Low
-		wait 100	
+	;loop 
+	;[
+		setindex ( 512 / packetsize )
+		seti 0
+		repeat index [
+			collect-data
+			print i
+			seti i + 1
+		]
+		fill-sd-block
+		
+		
 
-	]
+	;]
+	cyan
 end
 
 to read-IR-sensor
@@ -44,64 +49,90 @@ to read-Optical-sensor
 	output readADC 1
 end
 
-to test-sd
-    setSD_Block_High 0   ; Setting start block
-    setSD_Block_Low 0
-
-    init-sd              ; Initiate SD
-
-    erase-sd 0 0 0 1     ; erase-first block
-
-    setm 0
-
-    repeat 64 [
-       setn 0
-       repeat 8 [
-          writeb ($1500 + n) n   ; write 8 bytes to sub buffer
-          setn n + 1             ; Bump Count
-       ]
-       SD-Log-Chunk $1500 8      ; Log the sub buffer to sd buffer
-       setm m + 1                ; Bump Count
-    ]
-
-    sd-clear-buffer     ; Clear SD Buffer
-    logread-sd          ; display buffer: should respond all 0's
-
-    read-sd 0 0          ; read block 0
-    logread-sd           ; display block: should respond all 0's
-
-    uninit-sd           ; Put SD on standby
-	
-	
-end
-
-to collect-data
-	blueon
-	init-packet 10
+to collect-cycle :wait-time
 	packet-word read-IR-sensor
 	packet-word read-Optical-sensor
-	add-checksum
-	write-packet-sd
-	wait 10
+	blueon 
+	wait 1
 	blueoff
+	wait :wait-time
 end
 
-to write-packet-sd
 
-	init-sd	
-	
+to collect-data
+	init-packet 10
+	repeat 6 [ collect-cycle 10 ] 
+	add-checksum
+	write-packet-sd
+end
+
+
+to write-packet-sd
 	setn 0
 	repeat packetsize [
 		writeb ($1500 + n ) (readb ($1fc0 + n))
 		setn n + 1
 	]
+	SD-Log-Chunk $1500 packetsize
+end
 
-	SD-Log-Chunk $1500 512
+to fill-sd-block
+	SD-Log-Chunk $1500 (512 - packetsize)
+end
 
-	sd-clear-buffer     ; Clear SD Buffer
-	logread-sd          ; display buffer: should respond all 0's
-	read-sd 0 0          ; read block 0
-	logread-sd           ; display block: should respond all 0's
-	uninit-sd           ; Put SD on standby
+to read-next-init
+	setsd_high 0
+	setsd_low 0
+	setsd_index 0
+end
+
+to read-next-packet
+	read-nth-packet sd_index
+	increment_sd_index
+	print sd_high
+	print sd_low
+	print sd_index
+end
+
+
+to increment_sd_index
+	ifelse (sd_index = ( 512 / packetsize) )
+	[
+		setsd_index 0
+		setsd_low sd_low + 1
+		increment_sd_block
+	]
+	[
+		setsd_index sd_index + 1
+	]
 	
+end
+
+to increment_sd_block
+	ifelse (sd_low = $FFFF) 
+	[
+		setsd_low 0
+		setsd_high sd_high + 1
+	]	
+	[
+		setsd_low sd_low + 1
+	]
+	read-sd sd_high sd_low	
+		
+end
+
+
+to read-nth-packet :nread
+	setm 0
+	repeat packetsize [
+		writeb ( $1fc0 + m ) (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
+		print (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
+		setm m + 1
+		mwait 100
+	]
+	
+end
+
+to check-next-packet
+	repeat 40 [ read-next-packet prs "__________ wait 30 ]
 end

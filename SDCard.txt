@@ -499,7 +499,7 @@ to read-sd :block_number_high :block_number_low
             ] ; end repeat
          ] ; end if
       ] ; end repeat	
-      prs "|SD Read Successful|    ; Report Successful Read
+      ;prs "|SD Read Successful|    ; Report Successful Read
 
    ] ; end if
 

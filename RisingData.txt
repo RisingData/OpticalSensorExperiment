@@ -13,8 +13,7 @@ to ul-init
 	yellowon
 	sd-clear-buffer
 	setpacketsize 36
-	setSD_Block_High 0
-        setSD_Block_Low 0
+	SD-Find-Open
 	init-sd
 	wait 10
 	yellowoff
@@ -24,21 +23,17 @@ to ul-go
 	greenon
 	wait 10 
 	greenoff
-	;loop 
-	;[
+	loop 
+	[
 		setindex ( 512 / packetsize )
 		seti 0
 		repeat index [
 			collect-data
-			print i
 			seti i + 1
 		]
 		fill-sd-block
 		
-		
-
-	;]
-	cyan
+	]
 end
 
 to read-IR-sensor
@@ -89,9 +84,11 @@ end
 to read-next-packet
 	read-nth-packet sd_index
 	increment_sd_index
+	prs "_____
 	print sd_high
 	print sd_low
 	print sd_index
+	prs "_____
 end
 
 
@@ -133,6 +130,6 @@ to read-nth-packet :nread
 	
 end
 
-to check-next-packet
-	repeat 40 [ read-next-packet prs "__________ wait 30 ]
+to read-packets :n
+	repeat :n [ read-next-packet]
 end

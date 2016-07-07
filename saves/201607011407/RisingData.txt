@@ -79,7 +79,6 @@ to read-next-init
 	setsd_high 0
 	setsd_low 0
 	setsd_index 0
-	read-sd sd_high sd_low	
 end
 
 to read-next-packet

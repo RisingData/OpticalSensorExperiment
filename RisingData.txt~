@@ -20,18 +20,19 @@ to ul-go
 	loop 
 	[
 		collect-data
+		wait 100
 	]
 end
 
 to collect-data
-	blueon
-	greenon
-	wait 1
-	blueoff 	
-	greenoff
 	init-packet 10
 	repeat 6 [ read-sensors ] 
-	add-checksum	
+	add-checksum
+	blueon
+	greenon
+	wait 5
+	blueoff 	
+	greenoff	
 end
 
 to read-sensors

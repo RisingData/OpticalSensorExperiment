@@ -20,6 +20,7 @@ to ul-go
 	loop 
 	[
 		collect-data
+		wait 50
 	]
 end
 
@@ -29,7 +30,7 @@ to collect-data
 	add-checksum
 	blueon
 	greenon
-	wait 1
+	wait 5
 	blueoff 	
 	greenoff	
 end

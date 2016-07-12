@@ -4,18 +4,16 @@ to ul-power
 	init-onboardleds
 	redon
 	wait 10
-	redoff
-	;ul-init
-	;ul-go
+	redoff	
 end
 
 to ul-init
 	yellowon
-	;sd-clear-buffer
+	sd-clear-buffer
 	setpacketsize 36
-	;init-sd
-	;SD-Find-Open
-	;read-next-init
+	init-sd
+	SD-Find-Open
+	read-next-init
 	wait 10
 	yellowoff
 end
@@ -27,13 +25,12 @@ to ul-go
 	wait 10
 	loop 
 	[
-		collect-data
-		wait 100		
-		;repeat 14 [
-		;	collect-data
-		;	wait 100
-		;]
-		;fill-sd-block
+			
+		repeat 14 [
+			collect-data
+			wait 30
+		]
+		fill-sd-block
 		
 	]
 end
@@ -58,9 +55,9 @@ end
 
 to collect-data
 	init-packet 10
-	repeat 6 [ collect-cycle ] 
+	repeat 6 [ read-sensors ] 
 	add-checksum
-	;write-packet-sd
+	write-packet-sd
 end
 
 
@@ -97,11 +94,6 @@ end
 to read-next-packet
 	read-nth-packet sd_index
 	increment_sd_index
-	;prs "_____
-	;print sd_high
-	;print sd_low
-	;print sd_index
-	;prs "_____
 end
 
 

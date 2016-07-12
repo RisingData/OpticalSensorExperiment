@@ -1,20 +1,16 @@
 to run-once
 	init-ulogo
 	init-time
-	ul-run [ read-packets ]
 	loop [ receive-packet wait 10 ]
 end
 
 to init-ulogo
 	stopvm
 	ul-power
-	wait 1
 	ul-init
-	wait 1
-	ul-go
-	
+	ul-go	
 end
 
 to process-data-packet
-	print "data
+	
 end

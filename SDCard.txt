@@ -291,7 +291,7 @@ to init-sd                ; Word to Initiate the SD Card
    if (cmd58 != 1)  and (:sd_stat = 1) [ make "sd_stat 5 
       prs "|SD Initiation Failure: Incorrect Card Type Inserted| ]
 
-   if (:sd_stat = 1) [  prs "|SD Initiation Successful|]
+   ;if (:sd_stat = 1) [  prs "|SD Initiation Successful|]
    
 end
 
@@ -1064,8 +1064,8 @@ to SD-Find-Open
       SD-Block-Bump                   ; If not (0,0) bump block
    ] ; end else
 
-   prf "|SD_Block_High: %d, | SD_Block_High
-   prf "|SD_Block_Low: %d \n| SD_Block_Low
+   ;prf "|SD_Block_High: %d, | SD_Block_High
+   ;prf "|SD_Block_Low: %d \n| SD_Block_Low
 
 end
 

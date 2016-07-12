@@ -1,6 +1,7 @@
 to run-once
 	init-ulogo
 	init-time
+	ul-run [ read-packets ]
 	loop [ receive-packet wait 10 ]
 end
 

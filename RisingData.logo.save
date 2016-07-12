@@ -1,0 +1,9 @@
+to get-data
+	init-time
+	ul-run [ read-packets ]
+	loop [ receive-packet wait 10 ]
+end
+
+to process-data-packet
+	print "data
+end

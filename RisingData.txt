@@ -1,20 +1,21 @@
-global [ packetsize, index, i, sd_index, sd_low, sd_high ]
+global [ packetsize, sd_index, sd_low, sd_high ]
 
 to ul-power
 	init-onboardleds
 	redon
 	wait 10
 	redoff
-	ul-init
-	ul-go
+	;ul-init
+	;ul-go
 end
 
 to ul-init
 	yellowon
-	sd-clear-buffer
+	;sd-clear-buffer
 	setpacketsize 36
-	SD-Find-Open
-	init-sd
+	;init-sd
+	;SD-Find-Open
+	;read-next-init
 	wait 10
 	yellowoff
 end
@@ -23,15 +24,16 @@ to ul-go
 	greenon
 	wait 10 
 	greenoff
+	wait 10
 	loop 
 	[
-		setindex ( 512 / packetsize )
-		seti 0
-		repeat index [
-			collect-data
-			seti i + 1
-		]
-		fill-sd-block
+		collect-data
+		wait 100		
+		;repeat 14 [
+		;	collect-data
+		;	wait 100
+		;]
+		;fill-sd-block
 		
 	]
 end
@@ -44,21 +46,21 @@ to read-Optical-sensor
 	output readADC 1
 end
 
-to collect-cycle :wait-time
+to read-sensors
 	packet-word read-IR-sensor
 	packet-word read-Optical-sensor
 	blueon 
 	wait 1
 	blueoff
-	wait :wait-time
+	wait 10
 end
 
 
 to collect-data
 	init-packet 10
-	repeat 6 [ collect-cycle 10 ] 
+	repeat 6 [ read-sensors ] 
 	add-checksum
-	write-packet-sd
+	;write-packet-sd
 end
 
 
@@ -69,10 +71,20 @@ to write-packet-sd
 		setn n + 1
 	]
 	SD-Log-Chunk $1500 packetsize
+	redon 
+	blueon
+	wait 5
+	redoff
+	blueoff
 end
 
-to fill-sd-block
+to fill-sd-block	
 	SD-Log-Chunk $1500 (512 - packetsize)
+	redon
+	greenon
+	wait 5
+	redoff
+	greenoff
 end
 
 to read-next-init
@@ -85,11 +97,11 @@ end
 to read-next-packet
 	read-nth-packet sd_index
 	increment_sd_index
-	prs "_____
-	print sd_high
-	print sd_low
-	print sd_index
-	prs "_____
+	;prs "_____
+	;print sd_high
+	;print sd_low
+	;print sd_index
+	;prs "_____
 end
 
 
@@ -122,15 +134,15 @@ end
 
 to read-nth-packet :nread
 	setm 0
-	repeat packetsize [
+	repeat packetsize + 1 [
 		writeb ( $1fc0 + m ) (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
-		print (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
 		setm m + 1
-		mwait 100
+		mwait 150
 	]
 	
 end
 
-to read-packets :n
-	repeat :n [ read-next-packet]
+to read-packets 
+	repeat 14 [ read-next-packet greenon wait 20 greenoff]
 end
+

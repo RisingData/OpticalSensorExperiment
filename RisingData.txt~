@@ -1,10 +1,4 @@
 
-to auto-start
-	ul-power
-	ul-init
-	ul-go
-end
-
 to ul-power
 	init-onboardleds
 	redon
@@ -29,12 +23,15 @@ to ul-go
 	]
 end
 
-to read-IR-sensor
-	output readADC 0
-end
-
-to read-Optical-sensor
-	output readADC 1
+to collect-data
+	blueon
+	greenon
+	wait 1
+	blueoff 	
+	greenoff
+	init-packet 10
+	repeat 6 [ read-sensors ] 
+	add-checksum	
 end
 
 to read-sensors
@@ -46,11 +43,12 @@ to read-sensors
 	wait 10
 end
 
+to read-IR-sensor
+	output readADC 0
+end
 
-to collect-data
-	init-packet 10
-	repeat 6 [ read-sensors ] 
-	add-checksum	
+to read-Optical-sensor
+	output readADC 1
 end
 
 

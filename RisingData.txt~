@@ -28,7 +28,7 @@ to ul-go
 			
 		repeat 14 [
 			collect-data
-			wait 30
+			wait 50
 		]
 		fill-sd-block
 		

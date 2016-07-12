@@ -1,83 +1,5 @@
 ;Experiment Specific Code for Rising Data
-to write-packet-sd
-	setn 0
-	repeat packetsize [
-		writeb ($1500 + n ) (readb ($1fc0 + n))
-		setn n + 1
-	]
-	SD-Log-Chunk $1500 packetsize
-	redon 
-	blueon
-	wait 5
-	redoff
-	blueoff
-end
-
-to fill-sd-block	
-	SD-Log-Chunk $1500 (512 - packetsize)
-	redon
-	greenon
-	wait 5
-	redoff
-	greenoff
-end
-
-to read-next-init
-	setsd_high 0
-	setsd_low 0
-	setsd_index 0
-	read-sd sd_high sd_low	
-end
-
-to read-next-packet
-	read-nth-packet sd_index
-	increment_sd_index
-end
-
-
-to increment_sd_index
-	ifelse (sd_index = ( 512 / packetsize) )
-	[
-		setsd_index 0
-		setsd_low sd_low + 1
-		increment_sd_block
-	]
-	[
-		setsd_index sd_index + 1
-	]
-	
-end
-
-to increment_sd_block
-	ifelse (sd_low = $FFFF) 
-	[
-		setsd_low 0
-		setsd_high sd_high + 1
-	]	
-	[
-		setsd_low sd_low + 1
-	]
-	read-sd sd_high sd_low	
-		
-end
-
-
-to read-nth-packet :nread
-	setm 0
-	repeat packetsize + 1 [
-		writeb ( $1fc0 + m ) (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
-		setm m + 1
-		mwait 150
-	]
-	
-end
-
-to read-packets 
-	repeat 14 [ read-next-packet greenon wait 20 greenoff]
-end
-
-
-
+global [ packetsize ]
 ;*********************************************************************************
 ; This code is used to run a micro SD Card using Sparkfun's micro SD breakout 
 ; board (BOB-00544) for the uLogo App Board.
@@ -1376,3 +1298,8 @@ end
 ;
 ; End Example
 ;*********************************************************************************
+
+
+
+
+

@@ -1,10 +1,12 @@
-global [ packetsize, sd_index, sd_low, sd_high ]
+global [ packetsize, sd_index, sd_low, sd_high, vbyte, rbyte ]
 
 to ul-power
 	init-onboardleds
 	redon
 	wait 10
-	redoff	
+	redoff
+	ul-init
+	ul-go
 end
 
 to ul-init
@@ -13,7 +15,6 @@ to ul-init
 	setpacketsize 36
 	init-sd
 	SD-Find-Open
-	read-next-init
 	wait 10
 	yellowoff
 end
@@ -60,7 +61,13 @@ to collect-data
 	write-packet-sd
 end
 
+to read-data
+	read-next-init
+	read-packets 
+end
 
+
+;;;;;;;;;;;;;;;;;;;;;;;; THE HOOD ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to write-packet-sd
 	setn 0
 	repeat packetsize [
@@ -127,7 +134,7 @@ end
 to read-nth-packet :nread
 	setm 0
 	repeat packetsize + 1 [
-		writeb ( $1fc0 + m ) (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
+		writeb ( $1f80 + m ) (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
 		setm m + 1
 		mwait 150
 	]
@@ -135,6 +142,23 @@ to read-nth-packet :nread
 end
 
 to read-packets 
-	repeat 14 [ read-next-packet greenon wait 20 greenoff]
+	init-sd
+	setvbyte 32
+	read-next-init
+	loop [ 
+		setrbyte readb (SD_Buffer + ( packetsize * sd_index ))
+		print rbyte
+		print vbyte		
+		;if not (rbyte = vbyte) [ redon wait 1 redoff wait 1 redon wait 1 redoff stop ]		
+		;read-next-packet 			
+		;greenon 
+		;wait 10 
+		;greenoff
+		;wait 10		
+		
+		]
+	]
 end
+
+
 

@@ -1,6 +1,7 @@
 to run-once
 	init-ulogo
 	init-time
+	wait 50
 	loop [ receive-packet ]
 end
 
@@ -13,4 +14,10 @@ end
 
 to process-data-packet
 	
+end
+
+to get-data
+	stopvm
+	ul-blind-run [read-data]
+	loop [ receive-packet ]
 end

@@ -15,3 +15,10 @@ end
 to process-data-packet
 	
 end
+
+to get-data
+	init-time
+	stopvm
+	ul-blind-run [read-data]
+	loop [ receive-packet ]
+end

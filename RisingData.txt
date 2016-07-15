@@ -29,7 +29,7 @@ to ul-go
 			
 		repeat 14 [
 			collect-data
-			wait 50
+			wait 20
 		]
 		fill-sd-block
 		
@@ -84,10 +84,10 @@ end
 
 to fill-sd-block	
 	SD-Log-Chunk $1500 (512 - packetsize)
-	redon
+	blueon
 	greenon
 	wait 5
-	redoff
+	blueon
 	greenoff
 end
 
@@ -147,8 +147,8 @@ to read-packets
 	read-next-init
 	loop [ 
 		setrbyte readb (SD_Buffer + ( packetsize * sd_index ))
-		if not (rbyte = vbyte) [ redon wait 1 redoff wait 1 redon wait 1 redoff stop ]		
-		read-next-packet 			
+		if not (rbyte = vbyte) [ redon stop ]		
+		read-next-packet			
 		greenon 
 		wait 10 
 		greenoff

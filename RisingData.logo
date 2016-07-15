@@ -1,23 +1,93 @@
 to run-once
+	init-jlogo
 	init-ulogo
-	init-time
-	wait 50
-	loop [ receive-packet ]
+	print "|monitoring packets...|
+	loop [ receive-packet wait 10 ]
 end
 
 to init-ulogo
 	stopvm
-	ul-power
-	ul-init
-	ul-go	
+	ul-blind-run [ul-power]
+end
+
+to init-jlogo
+	init-time
+	make "index []
+	make "polarized []
+	make "unpolarized []	
 end
 
 to process-data-packet
+	if(:type  = 10 )
+	[
+		repeat 6 [
+			ifelse ((count :index ) = 0) [make "index [0]]	
+			[make "index (se :index ((last :index) + 1 ) )]
+		]
 	
+		make "polarized se :polarized last :p10-word00
+		make "unpolarized se :unpolarized last :p10-word01
+	
+		make "polarized se :polarized last :p10-word02
+		make "unpolarized se :unpolarized last :p10-word03
+	
+		make "polarized se :polarized last :p10-word04
+		make "unpolarized se :unpolarized last :p10-word05
+	
+		make "polarized se :polarized last :p10-word06
+		make "unpolarized se :unpolarized last :p10-word07
+	
+		make "polarized se :polarized last :p10-word08
+		make "unpolarized se :unpolarized last :p10-word09
+	
+		make "polarized se :polarized last :p10-word10
+		make "unpolarized se :unpolarized last :p10-word11
+		
+
+		plot-light
+	]
 end
 
+
+to plot-light
+  	x-data "|| :index
+	y-data "|| :unpolarized		
+	setup-screen
+	box
+	tmlabel now 1.1 0.5
+	
+	title "|Luminosity vs Time|
+	xlabel "|Time|
+	ylabel "|Luminosity|	
+	
+	limits 0 (last :index) 0 500
+	xaxis 4 20 2 true
+	yaxis 4 20 2 true
+	
+	blue		
+	aspect 1 2
+	ptype 0
+	ltype 0
+	points
+	connect
+	redraw 
+	
+	y-data "|| :polarized
+	red	
+	ptype 0
+	ltype 0
+	points
+	connect
+	redraw 
+	
+	
+	wait 1
+	display-plot tile 1 2 1 1 
+
+end
 to get-data
 	init-time
+	print "|retrieving packets...|
 	stopvm
 	ul-blind-run [read-data]
 	loop [ receive-packet ]

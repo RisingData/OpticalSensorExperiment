@@ -1,0 +1,64 @@
+global [ packetsize, sd_index, sd_low, sd_high ]
+
+to ul-power
+	init-onboardleds
+	redon
+	wait 10
+	redoff	
+end
+
+to ul-init
+	yellowon
+	sd-clear-buffer
+	setpacketsize 36
+	init-sd
+	SD-Find-Open
+	read-next-init
+	wait 10
+	yellowoff
+end
+
+to ul-go
+	greenon
+	wait 10 
+	greenoff
+	wait 10
+	loop 
+	[
+			
+		repeat 14 [
+			collect-data
+			wait 50
+		]
+		fill-sd-block
+		
+	]
+end
+
+to read-IR-sensor
+	output readADC 0
+end
+
+to read-Optical-sensor
+	output readADC 1
+end
+
+to read-sensors
+	packet-word read-IR-sensor
+	packet-word read-Optical-sensor
+	blueon 
+	wait 1
+	blueoff
+	wait 10
+end
+
+
+to collect-data
+	init-packet 10
+	repeat 6 [ read-sensors ] 
+	add-checksum
+	write-packet-sd
+end
+
+
+

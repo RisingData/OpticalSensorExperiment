@@ -50551,3 +50551,8 @@ print 1234
 
 
 
+.compile
+  Compiling...
+  4977 bytes
+print 1234
+  1234

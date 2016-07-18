@@ -50,8 +50,8 @@ end
 
 
 to plot-light
-  	x-data "|| :index
-	y-data "|| :unpolarized		
+  	x-data "|a| :index
+	y-data "|b| :unpolarized		
 	setup-screen
 	box
 	tmlabel now 1.1 0.5
@@ -72,7 +72,7 @@ to plot-light
 	connect
 	redraw 
 	
-	y-data "|| :polarized
+	y-data "|c| :polarized
 	red	
 	ptype 0
 	ltype 0

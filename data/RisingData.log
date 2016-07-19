@@ -50556,3 +50556,41 @@ print 1234
   4977 bytes
 print 1234
   1234
+.compile
+  Compiling...
+  4983 bytes
+.download
+  4983 bytes
+ul-power
+.rr
+  Opening Project  RisingData
+  project reloaded
+.get-data
+  retrieving packets...
+  T10 1468959775 02592 65535 00156 06865 [34m 00012 00089 00103 00092 00103 00094 00107 00092 00103 00092 00105 00088 00103 [37m 54741
+  index has no value in process-data-packet
+.rr
+  Opening Project  RisingData
+  project reloaded
+.get-data
+  retrieving packets...
+.rr
+  busy
+..
+  stopped.
+.rr
+  Opening Project  RisingData
+  project reloaded
+.get-data
+  retrieving packets...
+..
+  stopped.
+.receive-packet
+..
+  stopped.
+.rl $1f80 36
+  You don't say what to do with 0 0 255 255 156 0 209 26 12 0 89 0 103 0 92 0 103 0 94 0 107 0 92 0 103 0 92 0 105 0 88 0 103 0 213 213
+.init-jlogo
+.receive-packet
+.rr
+  busy

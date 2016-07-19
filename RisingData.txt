@@ -5,6 +5,8 @@ to ul-power
 	redon
 	wait 10
 	redoff	
+	ul-init
+	ul-go
 end
 
 to ul-init

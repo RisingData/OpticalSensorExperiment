@@ -50,7 +50,7 @@ end
 
 
 to plot-light
-  	x-data "|a| :index
+	x-data "|a| :index
 	y-data "|b| :unpolarized		
 	setup-screen
 	box
@@ -89,6 +89,13 @@ to get-data
 	init-time
 	print "|retrieving packets...|
 	stopvm
-	ul-blind-run [read-data]
-	loop [ receive-packet ]
+	ul-init
+	init-jlogo
+	ul-run [read-next-init]
+	wait 10
+	loop [
+		ul-run [read-next-packet]
+		wait 10
+		receive-packet
+	]
 end

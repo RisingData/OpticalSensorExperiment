@@ -50594,3 +50594,12 @@ ul-power
 .receive-packet
 .rr
   busy
+.compile
+  Compiling...
+  packetsize undefined in write-packet-sd
+.compile
+  Compiling...
+  4983 bytes
+read-next-init
+read-next-packet
+.receive-packet

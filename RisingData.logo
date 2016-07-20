@@ -12,7 +12,7 @@ end
 
 to init-jlogo
 	init-time
-	make "index []
+	make "uTime []
 	make "polarized []
 	make "unpolarized []	
 end
@@ -20,9 +20,14 @@ end
 to process-data-packet
 	if(:type  = 10 )
 	[
+		
+		let [time 10 * ( nth 2 (packet-words :pack)) + ( nth 3 (packet-words :pack) ) / 1000]
+		let[ i 0 ]
 		repeat 6 [
-			ifelse ((count :index ) = 0) [make "index [0]]	
-			[make "index (se :index ((last :index) + 1 ) )]
+			ifelse ((count :uTime ) = 0) 
+			[make "uTime [ 0 ] ]	
+			[make "uTime (se :uTime ( :time ) + 10 * :i ) ]
+			let [i (:i + 1)]
 		]
 	
 		make "polarized se :polarized last :p10-word00
@@ -50,7 +55,7 @@ end
 
 
 to plot-light
-	x-data "|a| :index
+	x-data "|a| :uTime
 	y-data "|b| :unpolarized		
 	setup-screen
 	box
@@ -60,7 +65,7 @@ to plot-light
 	xlabel "|Time|
 	ylabel "|Luminosity|	
 	
-	limits 0 (last :index) 0 500
+	limits 0 (last :uTime) 0 500
 	xaxis 4 20 2 true
 	yaxis 4 20 2 true
 	
@@ -95,7 +100,6 @@ to get-data
 	wait 10
 	loop [
 		ul-run [read-next-packet]
-		wait 10
 		receive-packet
 	]
 end

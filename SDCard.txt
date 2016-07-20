@@ -64,8 +64,9 @@ end
 
 to read-nth-packet :nread
 	setm 0
-	repeat packetsize + 1 [
-		writeb ( $1fc0 + m ) (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
+	repeat packetsize [
+		writeb ( $1f80 + m ) (readb (SD_Buffer + m + ( packetsize * :nread ) ) )
+		;print readb (SD_Buffer + m + ( packetsize * :nread ) ) 
 		setm m + 1
 		mwait 150
 	]

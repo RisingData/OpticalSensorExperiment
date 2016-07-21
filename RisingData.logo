@@ -91,6 +91,7 @@ to plot-light
 
 end
 to get-data
+	compile
 	init-time
 	print "|retrieving packets...|
 	stopvm
